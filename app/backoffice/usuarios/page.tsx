@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { collection, getDocs, deleteDoc, doc, updateDoc, orderBy, query } from "firebase/firestore"
+import { collection, getDocs, doc, updateDoc, orderBy, query } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -31,6 +31,7 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newBalance, setNewBalance] = useState("")
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -75,20 +76,37 @@ export default function AdminUsersPage() {
     }
 
     if (confirm("Tem certeza que deseja deletar este usuário? Esta ação não pode ser desfeita.")) {
+      setDeletingUserId(userId)
+      
       try {
-        await deleteDoc(doc(db, "users", userId))
+        toast({
+          title: "Deletando usuário...",
+          description: "Aguarde enquanto removemos o usuário do sistema.",
+        })
+
+        const response = await fetch(`/api/users/${userId}`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Erro ao deletar usuário')
+        }
+
         setUsers((prev) => prev.filter((u) => u.id !== userId))
         toast({
           title: "Usuário deletado",
-          description: "O usuário foi removido com sucesso.",
+          description: "O usuário foi removido com sucesso do sistema.",
         })
       } catch (error) {
         console.error("Error deleting user:", error)
         toast({
           title: "Erro",
-          description: "Não foi possível deletar o usuário.",
+          description: error instanceof Error ? error.message : "Não foi possível deletar o usuário.",
           variant: "destructive",
         })
+      } finally {
+        setDeletingUserId(null)
       }
     }
   }
@@ -230,9 +248,13 @@ export default function AdminUsersPage() {
                               variant="destructive"
                               size="sm"
                               onClick={() => handleDelete(user.id)}
-                              disabled={user.id === currentUser.id}
+                              disabled={user.id === currentUser.id || deletingUserId === user.id}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {deletingUserId === user.id ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </TableCell>
