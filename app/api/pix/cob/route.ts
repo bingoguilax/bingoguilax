@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       requestNumber,
       dueDate,
       amount: Number(amount),
-      callbackUrl: "https://bingofluxsolucoes-khaki.vercel.app/api/pix/webhook",
+      callbackUrl: "https://bingoguilax.com.br/api/pix/webhook",
       client,
       split: splitObj
     };

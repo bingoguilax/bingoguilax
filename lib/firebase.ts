@@ -3,13 +3,13 @@ import { getAuth } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCah-szwRoYDZGxbc_L32PI0kZSMV7cSZ4",
-  authDomain: "bingo-final.firebaseapp.com",
-  projectId: "bingo-final",
-  storageBucket: "bingo-final.firebasestorage.app",
-  messagingSenderId: "880579438390",
-  appId: "1:880579438390:web:f39666fb5d20a7593cf597",
-  measurementId: "G-4J9E5YVHPB",
+  apiKey: "AIzaSyA90EJm0jAVmGPaMD8Q3e8foetYaPTIPTs",
+  authDomain: "bingo-guilax.firebaseapp.com",
+  projectId: "bingo-guilax",
+  storageBucket: "bingo-guilax.firebasestorage.app",
+  messagingSenderId: "1049005993056",
+  appId: "1:1049005993056:web:d63c67be831078b895a705",
+  measurementId: "G-YV2ZDY4MDF"
 }
 
 const app = initializeApp(firebaseConfig)
