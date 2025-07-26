@@ -96,7 +96,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#000732' }}>
       <div className="w-full max-w-md flex flex-col items-center">
         <img
-          src="https://i.imgur.com/J5dfutP.png"
+          src="https://i.imgur.com/ztlgaHG.jpeg"
           alt="Banner do Bingo Registro"
           className="w-full h-52 sm:h-64 object-contain rounded-t-md -mt-8 z-10 relative"
           style={{ marginBottom: '-2rem' }}

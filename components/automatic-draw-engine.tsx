@@ -15,7 +15,6 @@ import { WinnerModal } from "@/components/WinnerModal"
 interface AutomaticDrawEngineProps {
   drawId: string
   isActive: boolean
-  onStatsUpdate?: (stats: { totalPlayers: number, totalCards: number }) => void
 }
 
 interface Winner {
@@ -37,8 +36,7 @@ export function AutomaticDrawEngine({ drawId, isActive, onStatsUpdate }: Automat
   const [winnerQueue, setWinnerQueue] = useState<Winner[][]>([]);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [currentWinners, setCurrentWinners] = useState<Winner[]>([])
-  const [totalPlayers, setTotalPlayers] = useState<number>(0)
-  const [totalCards, setTotalCards] = useState<number>(0)
+  // Removido: totalPlayers e totalCards
   const { toast } = useToast()
   const announcedWinnersRef = useRef(new Set<string>())
   const drawRefState = useRef<Draw | null>(null)
@@ -50,26 +48,7 @@ export function AutomaticDrawEngine({ drawId, isActive, onStatsUpdate }: Automat
     }
   };
 
-  // Buscar jogadores e cartelas ao montar
-  useEffect(() => {
-    const fetchCards = async () => {
-      const cardsQuery = query(collection(db, "cards"), where("drawId", "==", drawId));
-      const cardsSnapshot = await getDocs(cardsQuery);
-      const totalCardsValue = cardsSnapshot.size;
-      const userIds = new Set<string>();
-      cardsSnapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.userId) userIds.add(data.userId);
-      });
-      const totalPlayersValue = userIds.size;
-      setTotalCards(totalCardsValue);
-      setTotalPlayers(totalPlayersValue);
-      if (onStatsUpdate) {
-        onStatsUpdate({ totalPlayers: totalPlayersValue, totalCards: totalCardsValue });
-      }
-    };
-    fetchCards();
-  }, [drawId, onStatsUpdate]);
+  // Removido: useEffect para buscar jogadores e cartelas
 
   // useEffect para escutar mudanças no sorteio
   useEffect(() => {
@@ -219,10 +198,7 @@ export function AutomaticDrawEngine({ drawId, isActive, onStatsUpdate }: Automat
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium">Sorteio Automático Ativo</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-sm font-medium">Jogadores:</span>
-                <span className="text-sm font-bold">{draw.totalCards ?? 0}</span>
-              </div>
+              {/* Removido: Exibição de jogadores/cartelas */}
             </div>
           </div>
         </div>

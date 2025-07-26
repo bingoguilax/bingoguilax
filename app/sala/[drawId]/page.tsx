@@ -759,15 +759,6 @@ const logDebugInfo = () => {
                     </div>
                   </>
                 )}
-                {/* Jogadores e cartelas participantes */}
-                <div className="mt-10 text-center">
-                  <span className="text-sm text-zinc-600 font-medium">Jogadores: </span>
-                  <span className="text-base font-bold text-zinc-800">{stats.totalPlayers}</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-sm text-zinc-600 font-medium">Cartelas participantes: </span>
-                  <span className="text-base font-bold text-zinc-800">{stats.totalCards}</span>
-                </div>
               </CardContent>
             </Card>
           )}

@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc, orderBy, query } from "firebase/firestore"
+import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc, orderBy, query, where } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -25,7 +25,7 @@ import { AdminLayout } from "@/components/layout/admin-layout"
 import { useAuth } from "@/hooks/use-auth"
 import { db } from "@/lib/firebase"
 import type { Draw } from "@/lib/types"
-import { Trash2, Edit, Plus, Trophy, Calendar } from "lucide-react"
+import { Trash2, Edit, Plus, Trophy, Calendar, BarChart3, Users, DollarSign } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface DrawFormData {
@@ -44,6 +44,12 @@ interface DrawFormData {
     quinaPercent: string
     cheiaPercent: string
   }
+}
+
+interface DrawStats {
+  totalPlayers: number
+  totalCards: number
+  totalRevenue: number
 }
 
 export default function AdminDrawsPage() {
@@ -70,6 +76,9 @@ export default function AdminDrawsPage() {
       cheiaPercent: "60",
     },
   })
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false)
+  const [selectedDrawStats, setSelectedDrawStats] = useState<DrawStats | null>(null)
+  const [loadingStats, setLoadingStats] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -198,6 +207,40 @@ export default function AdminDrawsPage() {
     }
 
     setIsDialogOpen(true)
+  }
+
+  const handleShowStats = async (draw: Draw) => {
+    setLoadingStats(true)
+    setStatsDialogOpen(true)
+    
+    try {
+      // Buscar todas as cartelas deste sorteio
+      const cardsQuery = query(collection(db, "cards"), where("drawId", "==", draw.id))
+      const cardsSnapshot = await getDocs(cardsQuery)
+      
+      // Contar jogadores únicos
+      const uniquePlayers = new Set<string>()
+      cardsSnapshot.docs.forEach(doc => {
+        uniquePlayers.add(doc.data().userId)
+      })
+      
+      const stats: DrawStats = {
+        totalPlayers: uniquePlayers.size,
+        totalCards: cardsSnapshot.size,
+        totalRevenue: cardsSnapshot.size * draw.cardPrice
+      }
+      
+      setSelectedDrawStats(stats)
+    } catch (error) {
+      console.error("Error fetching draw stats:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as estatísticas do sorteio.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingStats(false)
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -332,7 +375,11 @@ export default function AdminDrawsPage() {
           status: "waiting" as const,
           drawnNumbers: [],
           currentPhase: "quadra" as const,
-          winners: {},
+          winners: {
+            quadra: [],
+            quina: [],
+            cheia: []
+          },
           createdAt: new Date(),
         }
 
@@ -444,6 +491,14 @@ export default function AdminDrawsPage() {
                         <TableCell>{getStatusBadge(draw.status)}</TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleShowStats(draw)}
+                              className="bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700"
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                            </Button>
                             <Button variant="outline" size="sm" onClick={() => handleEditDraw(draw)}>
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -451,7 +506,7 @@ export default function AdminDrawsPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700"
+                                className="bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700"
                                 onClick={() => handleAdminister(draw.id)}
                               >
                                 Administrar
@@ -643,8 +698,6 @@ export default function AdminDrawsPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Remover esta seção do JSX: */}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -653,6 +706,80 @@ export default function AdminDrawsPage() {
               <Button onClick={handleSubmit} disabled={!formData.name || !formData.dateTime || !formData.cardPrice}>
                 <Trophy className="h-4 w-4 mr-2" />
                 {isEditing ? "Atualizar Sorteio" : "Criar Sorteio"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Estatísticas */}
+        <Dialog open={statsDialogOpen} onOpenChange={setStatsDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Estatísticas do Sorteio
+              </DialogTitle>
+              <DialogDescription>
+                Informações detalhadas sobre vendas e participação
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {loadingStats ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-2 text-sm text-muted-foreground">Carregando estatísticas...</p>
+                </div>
+              ) : selectedDrawStats ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-900">Total de Jogadores</p>
+                          <p className="text-2xl font-bold text-blue-700">{selectedDrawStats.totalPlayers}</p>
+                        </div>
+                        <div className="bg-blue-100 p-2 rounded-full">
+                          <Users className="h-6 w-6 text-blue-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-900">Cartelas Vendidas</p>
+                          <p className="text-2xl font-bold text-green-700">{selectedDrawStats.totalCards}</p>
+                        </div>
+                        <div className="bg-green-100 p-2 rounded-full">
+                          <Trophy className="h-6 w-6 text-green-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-900">Valor Total Arrecadado</p>
+                          <p className="text-2xl font-bold text-purple-700">
+                            R$ {selectedDrawStats.totalRevenue.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-purple-100 p-2 rounded-full">
+                          <DollarSign className="h-6 w-6 text-purple-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nenhuma estatística disponível
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStatsDialogOpen(false)}>
+                Fechar
               </Button>
             </DialogFooter>
           </DialogContent>

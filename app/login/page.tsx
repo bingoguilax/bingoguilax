@@ -116,7 +116,7 @@ export default function LoginPage() {
       )}
       <div className="w-full max-w-md flex flex-col items-center">
         <img
-          src="https://i.imgur.com/1odU7L2.png"
+          src="https://i.imgur.com/dqg1OfH.jpeg"
           alt="Banner do Bingo"
           className="w-full h-52 sm:h-64 object-contain rounded-t-md -mt-8 z-10 relative"
           style={{ marginBottom: '-2rem' }}
