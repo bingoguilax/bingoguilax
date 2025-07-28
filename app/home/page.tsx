@@ -358,13 +358,22 @@ export default function HomePage() {
                       )}
 
                       {hasPurchasedCards(draw.id) ? (
-                        <Button
-                          className="w-full bg-yellow-400 hover:bg-yellow-500 text-black border-none"
-                          onClick={() => router.push(`/sala/${draw.id}`)}
-                        >
-                          <Users className="h-4 w-4 mr-2" />
-                          Entrar na Sala
-                        </Button>
+                        <div className="space-y-2">
+                          <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white border-none"
+                            onClick={() => handleBuyCards(draw)}
+                          >
+                            <ShoppingCart className="h-4 w-4 mr-2" />
+                            Comprar Mais Cartelas
+                          </Button>
+                          <Button
+                            className="w-full bg-yellow-400 hover:bg-yellow-500 text-black border-none"
+                            onClick={() => router.push(`/sala/${draw.id}`)}
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Entrar na Sala
+                          </Button>
+                        </div>
                       ) : (
                         <Button
                           className="w-full bg-green-600 hover:bg-green-700 text-white border-none"

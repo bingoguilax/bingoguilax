@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc, orderBy, query, where } from "firebase/firestore"
+import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc, orderBy, query, where, getDoc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -50,6 +50,11 @@ interface DrawStats {
   totalPlayers: number
   totalCards: number
   totalRevenue: number
+  playerStats: {
+    userId: string
+    userName: string
+    cardCount: number
+  }[]
 }
 
 export default function AdminDrawsPage() {
@@ -218,16 +223,49 @@ export default function AdminDrawsPage() {
       const cardsQuery = query(collection(db, "cards"), where("drawId", "==", draw.id))
       const cardsSnapshot = await getDocs(cardsQuery)
       
-      // Contar jogadores únicos
+      // Contar jogadores únicos e suas cartelas
+      const playerCardCounts = new Map<string, number>()
       const uniquePlayers = new Set<string>()
+      
       cardsSnapshot.docs.forEach(doc => {
-        uniquePlayers.add(doc.data().userId)
+        const userId = doc.data().userId
+        uniquePlayers.add(userId)
+        playerCardCounts.set(userId, (playerCardCounts.get(userId) || 0) + 1)
       })
+      
+      // Buscar informações dos usuários
+      const playerStats = []
+      for (const [userId, cardCount] of playerCardCounts) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", userId))
+          let userName = "Usuário Desconhecido"
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            userName = userData.name || userData.email || "Usuário Desconhecido"
+          }
+          playerStats.push({
+            userId,
+            userName,
+            cardCount
+          })
+        } catch (error) {
+          console.error("Error fetching user data:", error)
+          playerStats.push({
+            userId,
+            userName: "Usuário Desconhecido",
+            cardCount
+          })
+        }
+      }
+      
+      // Ordenar por número de cartelas em ordem decrescente
+      playerStats.sort((a, b) => b.cardCount - a.cardCount)
       
       const stats: DrawStats = {
         totalPlayers: uniquePlayers.size,
         totalCards: cardsSnapshot.size,
-        totalRevenue: cardsSnapshot.size * draw.cardPrice
+        totalRevenue: cardsSnapshot.size * draw.cardPrice,
+        playerStats
       }
       
       setSelectedDrawStats(stats)
@@ -250,7 +288,7 @@ export default function AdminDrawsPage() {
       setFormData((prev) => ({
         ...prev,
         [parent]: {
-          ...prev[parent as keyof typeof prev],
+          ...(prev[parent as keyof typeof prev] as any),
           [child]: value,
         },
       }))
@@ -713,7 +751,7 @@ export default function AdminDrawsPage() {
 
         {/* Modal de Estatísticas */}
         <Dialog open={statsDialogOpen} onOpenChange={setStatsDialogOpen}>
-          <DialogContent className="sm:max-w-[400px]">
+          <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
@@ -768,6 +806,40 @@ export default function AdminDrawsPage() {
                           <DollarSign className="h-6 w-6 text-purple-600" />
                         </div>
                       </div>
+                    </div>
+                  </div>
+                  
+                  {/* Lista de Jogadores */}
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold mb-3 text-gray-900">Jogadores por Cartelas</h3>
+                    <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                      {selectedDrawStats.playerStats.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedDrawStats.playerStats.map((player, index) => (
+                            <div key={player.userId} className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
+                              <div className="flex items-center space-x-3">
+                                <div className="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center text-sm font-semibold">
+                                  {index + 1}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">{player.userName}</p>
+                                  <p className="text-sm text-gray-500">ID: {player.userId}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-green-600">{player.cardCount}</p>
+                                <p className="text-xs text-gray-500">
+                                  {player.cardCount === 1 ? 'cartela' : 'cartelas'}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          Nenhum jogador encontrado
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
