@@ -11,9 +11,11 @@ export interface User {
   lastWin?: Date
   // Campos de afiliado
   affiliateCode?: string
+  isActiveAffiliate?: boolean
   referredBy?: string
   referredUsers?: string[]
   totalCommission?: number
+  customCommissionRate?: number
   createdAt: Date
 }
 
@@ -94,9 +96,13 @@ export interface WinnerDetail {
 }
 
 export interface AffiliateSettings {
-  commissionRate: number
+  id: string
+  globalCommissionRate: number
   minWithdrawal: number
   dailyWithdrawalLimit: number
+  isActive: boolean
+  lastUpdated: Date
+  updatedBy: string
 }
 
 export interface AffiliateWithdrawal {
@@ -113,9 +119,12 @@ export interface AffiliateWithdrawal {
 export interface CommissionTransaction {
   id: string
   affiliateId: string
+  affiliateName: string
   userId: string
+  referredUserName: string
   depositId: string
-  amount: number
+  depositAmount: number
+  commissionAmount: number
   commissionRate: number
   status: "pending" | "paid"
   createdAt: Date

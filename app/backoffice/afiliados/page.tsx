@@ -85,13 +85,20 @@ export default function AffiliatesPage() {
     try {
       const settingsDoc = await getDoc(doc(db, "settings", "affiliate"))
       if (settingsDoc.exists()) {
-        const settings = { id: settingsDoc.id, ...settingsDoc.data() } as AffiliateSettings
+        const data = settingsDoc.data()
+        const settings: AffiliateSettings = {
+          id: settingsDoc.id,
+          ...data,
+          lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : new Date(data.lastUpdated || Date.now())
+        } as AffiliateSettings
         setAffiliateSettings(settings)
-        setGlobalCommissionRate(settings.globalCommissionRate)
+        setGlobalCommissionRate(settings.globalCommissionRate || 5)
       } else {
         // Criar configurações padrão
         const defaultSettings: Omit<AffiliateSettings, 'id'> = {
           globalCommissionRate: 5,
+          minWithdrawal: 50,
+          dailyWithdrawalLimit: 1,
           isActive: true,
           lastUpdated: new Date(),
           updatedBy: user?.id || ""
@@ -110,7 +117,14 @@ export default function AffiliatesPage() {
     const transactions: CommissionTransaction[] = []
     
     transactionsSnapshot.forEach((doc) => {
-      transactions.push({ id: doc.id, ...doc.data() } as CommissionTransaction)
+      const data = doc.data()
+      const transaction: CommissionTransaction = {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now()),
+        paidAt: data.paidAt?.toDate ? data.paidAt.toDate() : (data.paidAt ? new Date(data.paidAt) : undefined)
+      } as CommissionTransaction
+      transactions.push(transaction)
     })
     
     setCommissionTransactions(transactions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()))
