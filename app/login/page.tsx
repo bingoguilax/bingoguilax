@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useEffect } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { sendPasswordResetEmail } from "firebase/auth"
+import { PWAInstallGuide } from "@/components/pwa-install-guide"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -173,6 +174,15 @@ export default function LoginPage() {
               >
                 Esqueceu a senha?
               </button>
+            </div>
+            
+            {/* Seção de instalação do PWA */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <div className="text-center mb-3">
+                <p className="text-sm text-gray-600 font-medium">📱 Melhor experiência no app</p>
+                <p className="text-xs text-gray-500">Instale grátis na sua tela inicial</p>
+              </div>
+              <PWAInstallGuide />
             </div>
           </CardContent>
         </Card>

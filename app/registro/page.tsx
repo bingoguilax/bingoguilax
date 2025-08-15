@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useRef, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createUserWithEmailAndPassword } from "firebase/auth"
-import { doc, setDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, setDoc, collection, query, where, getDocs, updateDoc, increment } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,8 +25,11 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [passwordVisible, setPasswordVisible] = useState(false)
   const phoneInputRef = useRef<HTMLInputElement>(null)
+  const [referrerCode, setReferrerCode] = useState("")
+  const [referrerName, setReferrerName] = useState("")
 
   // Função para formatar o telefone
   const formatPhone = (value: string) => {
@@ -35,6 +38,47 @@ export default function RegisterPage() {
     if (digits.length <= 2) return digits
     if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  }
+
+  // Função para gerar código de afiliado único
+  const generateAffiliateCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let result = ''
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return result
+  }
+
+  // Verificar código de referência na URL
+  useEffect(() => {
+    const code = searchParams.get('ref')
+    if (code) {
+      setReferrerCode(code)
+      checkReferrerCode(code)
+    }
+  }, [searchParams])
+
+  // Verificar se o código de referência é válido
+  const checkReferrerCode = async (code: string) => {
+    try {
+      const usersQuery = query(
+        collection(db, "users"), 
+        where("affiliateCode", "==", code)
+      )
+      const querySnapshot = await getDocs(usersQuery)
+      
+      if (!querySnapshot.empty) {
+        const referrerData = querySnapshot.docs[0].data()
+        
+        // Verificar se tem código de afiliado válido
+        if (referrerData.affiliateCode === code) {
+          setReferrerName(referrerData.name)
+        }
+      }
+    } catch (error) {
+      // Silently handle error
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,7 +113,8 @@ export default function RegisterPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password)
 
-      await setDoc(doc(db, "users", userCredential.user.uid), {
+      // Dados do usuário (sem gerar código de afiliado automaticamente)
+      const userData: any = {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
@@ -77,8 +122,40 @@ export default function RegisterPage() {
         role: "user",
         totalDeposited: 0,
         totalWithdrawn: 0,
+        referredUsers: [],
+        totalCommission: 0,
         createdAt: new Date(),
-      })
+      }
+
+      // Se há um código de referência válido, adicionar ao usuário
+      if (referrerCode && referrerName) {
+        userData.referredBy = referrerCode
+      }
+
+      await setDoc(doc(db, "users", userCredential.user.uid), userData)
+
+      // Se há um referenciador, atualizar sua lista de usuários indicados
+      if (referrerCode && referrerName) {
+        try {
+          const usersQuery = query(collection(db, "users"), where("affiliateCode", "==", referrerCode))
+          const querySnapshot = await getDocs(usersQuery)
+          
+          if (!querySnapshot.empty) {
+            const referrerDoc = querySnapshot.docs[0]
+            const referrerData = referrerDoc.data()
+            const currentReferredUsers = referrerData.referredUsers || []
+            
+            // Verificar se o usuário já não está na lista (evitar duplicatas)
+            if (!currentReferredUsers.includes(userCredential.user.uid)) {
+              await updateDoc(doc(db, "users", referrerDoc.id), {
+                referredUsers: [...currentReferredUsers, userCredential.user.uid]
+              })
+            }
+          }
+        } catch (error) {
+          // Silently handle error
+        }
+      }
 
       router.push("/home")
     } catch (error: any) {
@@ -105,6 +182,13 @@ export default function RegisterPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Registrar</CardTitle>
             <CardDescription>Crie sua conta para jogar Bingo</CardDescription>
+            {referrerName && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-sm text-blue-600">
+                  <strong>Você foi indicado por:</strong> {referrerName}
+                </div>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

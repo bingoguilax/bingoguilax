@@ -1,0 +1,246 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Verifica se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica se o usuário é admin
+    function isAdmin() {
+      return isAuthenticated() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Verifica se o usuário é o dono dos dados
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verifica se o usuário existe
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // users - REGRA CORRIGIDA COM PERMISSÃO PARA AFILIADOS
+    match /users/{userId} {
+      // Permitir leitura para usuários autenticados OU 
+      // para verificação de código de afiliado (campos específicos)
+      allow read: if isAuthenticated() || 
+                    (request.auth == null && 
+                     resource.data.keys().hasAny(['affiliateCode', 'name', 'isActiveAffiliate']));
+      
+      allow create: if isAuthenticated() && isOwner(userId);
+      
+      // Permitir atualização para donos, admins, ou para atualizar lista de indicados
+      allow update: if isOwner(userId) || isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance']) ||
+        (isAuthenticated() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referredUsers']));
+      
+      allow delete: if isAdmin();
+    }
+
+    // Regra específica para configurações de afiliado
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Regra para transações de comissão
+    match /commissionTransactions/{transactionId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // deposits
+    match /deposits/{depositId} {
+      allow read: if isAuthenticated() &&
+                    (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      userExists(request.auth.uid);
+
+      // Atualização permitida:
+      // - Se for admin autenticado
+      // - Ou se for um webhook não autenticado que altera apenas o campo `status`
+      //   e mantém o mesmo `userId`
+      allow update: if isAdmin() || (
+        request.auth == null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+        request.resource.data.userId == resource.data.userId
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() &&
+                    (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      userExists(request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // draws - REGRA CORRIGIDA
+    match /draws/{drawId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || 
+        (isAuthenticated() && 
+         request.resource.data.createdBy == request.auth.uid &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isColaborador == true);
+      allow update: if isAdmin() || 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['winners', 'winnerDetails', 'currentPhase', 'status', 'drawnNumbers', 'totalCards']);
+      allow delete: if isAdmin();
+    }
+
+    // cards
+    match /cards/{cardId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      userExists(request.auth.uid);
+      allow update: if isAdmin() ||
+                      (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // purchases
+    match /purchases/{purchaseId} {
+      allow read: if isAuthenticated() &&
+                    (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      userExists(request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // game_sessions
+    match /game_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // winners
+    match /winners/{winnerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() &&
+                    (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // system_config
+    match /system_config/{configId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // audit_logs
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+    
+    // colaboradorRequests - NOVA COLEÇÃO
+    match /colaboradorRequests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.userName is string &&
+                      request.resource.data.userEmail is string &&
+                      request.resource.data.planType in ['basic', 'premium'] &&
+                      request.resource.data.status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ============ NOVAS REGRAS PARA SISTEMA DE CUPONS ============
+
+    // coupons - Cupons de resgate
+    match /coupons/{couponId} {
+      // Admins podem ler todos os cupons
+      // Usuários autenticados podem ler cupons ativos (para validação)
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.isActive == true);
+      
+      // Apenas admins podem criar cupons
+      allow create: if isAdmin();
+      
+      // Admins podem atualizar tudo
+      // Sistema pode atualizar currentUses e usedBy para registrar uso
+      allow update: if isAdmin() || 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['currentUses', 'usedBy']);
+      
+      allow delete: if isAdmin();
+    }
+
+    // couponUsages - Registro de uso de cupons
+    match /couponUsages/{usageId} {
+      // Admins podem ler todos os usos
+      // Usuários podem ler apenas seus próprios usos
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      
+      // Sistema pode criar registros de uso
+      // Usuários podem criar registros do próprio uso
+      allow create: if isAuthenticated();
+      
+      // Apenas admins podem atualizar (não deveria ser necessário)
+      allow update: if isAdmin();
+      
+      // Apenas admins podem deletar
+      allow delete: if isAdmin();
+    }
+
+    // affiliateWithdrawals - Saques de afiliados
+    match /affiliateWithdrawals/{withdrawalId} {
+      // Admins podem ler todos os saques
+      // Afiliados podem ler apenas seus próprios saques
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.affiliateId == request.auth.uid);
+      
+      // Afiliados podem criar solicitações de saque
+      allow create: if isAuthenticated() &&
+                      request.resource.data.affiliateId == request.auth.uid;
+      
+      // Apenas admins podem atualizar (aprovar/rejeitar)
+      allow update: if isAdmin();
+      
+      // Apenas admins podem deletar
+      allow delete: if isAdmin();
+    }
+
+    // Segurança final: bloqueia qualquer acesso não especificado
+    match /{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

@@ -14,12 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { UserLayout } from "@/components/layout/user-layout"
 import { AuthenticatedScheduler } from "@/components/authenticated-scheduler"
 import { useAuth } from "@/hooks/use-auth"
 import { db } from "@/lib/firebase"
 import type { Draw, Purchase } from "@/lib/types"
-import { Clock, Trophy, Users, ShoppingCart } from "lucide-react"
+import { Clock, Trophy, Users, ShoppingCart, Ticket, Gift } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { calculatePrize } from "@/lib/prize-utils"
 
@@ -32,6 +34,12 @@ export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedQuantity, setSelectedQuantity] = useState<number>(5)
   const [purchasing, setPurchasing] = useState(false)
+
+  // Estados para cupom específico do sorteio
+  const [selectedDrawForCoupon, setSelectedDrawForCoupon] = useState<Draw | null>(null)
+  const [drawCouponCode, setDrawCouponCode] = useState("")
+  const [redeemingDrawCoupon, setRedeemingDrawCoupon] = useState(false)
+  const [drawCouponDialogOpen, setDrawCouponDialogOpen] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -82,6 +90,72 @@ export default function HomePage() {
     setSelectedDraw(draw)
     setSelectedQuantity(5)
     setIsModalOpen(true)
+  }
+
+  const handleOpenCouponForDraw = (draw: Draw) => {
+    setSelectedDrawForCoupon(draw)
+    setDrawCouponCode("")
+    setDrawCouponDialogOpen(true)
+  }
+
+
+
+  const handleRedeemDrawCoupon = async () => {
+    if (!user || !drawCouponCode.trim()) {
+      toast({
+        title: "Erro",
+        description: "Digite um código de cupom válido",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setRedeemingDrawCoupon(true)
+
+    try {
+      console.log("🎫 Resgatando cupom para sorteio:", drawCouponCode)
+      const response = await fetch('/api/coupons/redeem', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: drawCouponCode.trim(),
+          userId: user.id
+        })
+      })
+
+      const data = await response.json()
+      console.log("🎫 Resposta:", data)
+
+      if (response.ok && data.success) {
+        toast({
+          title: "🎉 Cupom Resgatado!",
+          description: data.message,
+        })
+        
+        setDrawCouponCode("")
+        setDrawCouponDialogOpen(false)
+        
+        // Recarregar os dados para mostrar as novas cartelas
+        window.location.reload()
+      } else {
+        toast({
+          title: "Erro ao resgatar cupom",
+          description: data.error || "Erro desconhecido",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error("Erro ao resgatar cupom:", error)
+      toast({
+        title: "Erro",
+        description: "Erro ao conectar com o servidor",
+        variant: "destructive"
+      })
+    } finally {
+      setRedeemingDrawCoupon(false)
+    }
   }
 
   const handlePurchase = async () => {
@@ -359,13 +433,24 @@ export default function HomePage() {
 
                       {hasPurchasedCards(draw.id) ? (
                         <div className="space-y-2">
-                          <Button
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white border-none"
-                            onClick={() => handleBuyCards(draw)}
-                          >
-                            <ShoppingCart className="h-4 w-4 mr-2" />
-                            Comprar Mais Cartelas
-                          </Button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              className="bg-blue-600 hover:bg-blue-700 text-white border-none"
+                              onClick={() => handleBuyCards(draw)}
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-1" />
+                              <span className="hidden sm:inline">Comprar</span>
+                              <span className="sm:hidden">+</span>
+                            </Button>
+                            <Button
+                              className="bg-green-600 hover:bg-green-700 text-white border-none"
+                              onClick={() => handleOpenCouponForDraw(draw)}
+                            >
+                              <Ticket className="h-4 w-4 mr-1" />
+                              <span className="hidden sm:inline">Cupom</span>
+                              <span className="sm:hidden">🎫</span>
+                            </Button>
+                          </div>
                           <Button
                             className="w-full bg-yellow-400 hover:bg-yellow-500 text-black border-none"
                             onClick={() => router.push(`/sala/${draw.id}`)}
@@ -375,13 +460,24 @@ export default function HomePage() {
                           </Button>
                         </div>
                       ) : (
-                        <Button
-                          className="w-full bg-green-600 hover:bg-green-700 text-white border-none"
-                          onClick={() => handleBuyCards(draw)}
-                        >
-                          <ShoppingCart className="h-4 w-4 mr-2" />
-                          Comprar Cartelas
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            className="bg-green-600 hover:bg-green-700 text-white border-none"
+                            onClick={() => handleBuyCards(draw)}
+                          >
+                            <ShoppingCart className="h-4 w-4 mr-1" />
+                            <span className="hidden sm:inline">Comprar</span>
+                            <span className="sm:hidden">💳</span>
+                          </Button>
+                          <Button
+                            className="bg-purple-600 hover:bg-purple-700 text-white border-none"
+                            onClick={() => handleOpenCouponForDraw(draw)}
+                          >
+                            <Ticket className="h-4 w-4 mr-1" />
+                            <span className="hidden sm:inline">Cupom</span>
+                            <span className="sm:hidden">🎫</span>
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -459,6 +555,97 @@ export default function HomePage() {
                 }
               >
                 {purchasing ? "Comprando..." : "Comprar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+
+
+        {/* Modal de Resgate de Cupom para Sorteio Específico */}
+        <Dialog open={drawCouponDialogOpen} onOpenChange={setDrawCouponDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Ticket className="h-5 w-5" />
+                Resgatar Cupom
+              </DialogTitle>
+              <DialogDescription>
+                {selectedDrawForCoupon ? (
+                  <>Resgate um cupom para o sorteio: <strong>{selectedDrawForCoupon.name}</strong></>
+                ) : (
+                  "Digite o código do seu cupom para ganhar cartelas gratuitas"
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              {selectedDrawForCoupon && (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-800 text-sm mb-2">
+                    <Trophy className="h-4 w-4" />
+                    <span className="font-medium">Sorteio Selecionado:</span>
+                  </div>
+                  <div className="text-blue-700">
+                    <p className="font-semibold">{selectedDrawForCoupon.name}</p>
+                    <p className="text-sm">Data: {formatDateTime(selectedDrawForCoupon.dateTime)}</p>
+                    <p className="text-sm">Valor por cartela: R$ {selectedDrawForCoupon.cardPrice.toFixed(2)}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="draw-coupon-code">Código do Cupom</Label>
+                <Input
+                  id="draw-coupon-code"
+                  placeholder="Ex: CUPOM10"
+                  value={drawCouponCode}
+                  onChange={(e) => setDrawCouponCode(e.target.value.toUpperCase())}
+                  className="text-center text-lg font-mono tracking-wider"
+                />
+              </div>
+              
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-green-800 text-sm">
+                  <Gift className="h-4 w-4" />
+                  <span className="font-medium">Importante:</span>
+                </div>
+                <ul className="text-green-700 text-sm mt-2 space-y-1">
+                  <li>• O cupom deve ser válido para este sorteio específico</li>
+                  <li>• Cada cupom pode ser usado apenas uma vez</li>
+                  <li>• As cartelas serão adicionadas automaticamente</li>
+                  <li>• Verifique se o código está correto</li>
+                </ul>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setDrawCouponDialogOpen(false)
+                  setDrawCouponCode("")
+                  setSelectedDrawForCoupon(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleRedeemDrawCoupon}
+                disabled={redeemingDrawCoupon || !drawCouponCode.trim()}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {redeemingDrawCoupon ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Resgatando...
+                  </>
+                ) : (
+                  <>
+                    <Ticket className="h-4 w-4 mr-2" />
+                    Resgatar Cupom
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

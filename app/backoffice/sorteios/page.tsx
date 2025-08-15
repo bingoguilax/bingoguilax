@@ -24,8 +24,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AdminLayout } from "@/components/layout/admin-layout"
 import { useAuth } from "@/hooks/use-auth"
 import { db } from "@/lib/firebase"
-import type { Draw } from "@/lib/types"
-import { Trash2, Edit, Plus, Trophy, Calendar, BarChart3, Users, DollarSign } from "lucide-react"
+import type { Draw, Coupon } from "@/lib/types"
+import { Trash2, Edit, Plus, Trophy, Calendar, BarChart3, Users, DollarSign, Ticket, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface DrawFormData {
@@ -44,6 +44,11 @@ interface DrawFormData {
     quinaPercent: string
     cheiaPercent: string
   }
+  coupons: Array<{
+    code: string
+    cardsAmount: string
+    maxUses: string
+  }>
 }
 
 interface DrawStats {
@@ -80,10 +85,26 @@ export default function AdminDrawsPage() {
       quinaPercent: "30",
       cheiaPercent: "60",
     },
+    coupons: [],
   })
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedDrawStats, setSelectedDrawStats] = useState<DrawStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  // Estados para cupons
+  const [drawCoupons, setDrawCoupons] = useState<Record<string, Coupon[]>>({})
+  const [loadingCoupons, setLoadingCoupons] = useState<Record<string, boolean>>({})
+  // Estados para modais de cupons
+  const [couponDetailsOpen, setCouponDetailsOpen] = useState(false)
+  const [couponEditOpen, setCouponEditOpen] = useState(false)
+  const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null)
+  const [couponUsages, setCouponUsages] = useState<any[]>([])
+  const [loadingCouponDetails, setLoadingCouponDetails] = useState(false)
+  const [editCouponData, setEditCouponData] = useState({
+    code: "",
+    cardsAmount: "",
+    maxUses: "",
+    isActive: true
+  })
   const router = useRouter()
   const { toast } = useToast()
 
@@ -106,6 +127,12 @@ export default function AdminDrawsPage() {
         })) as Draw[]
 
         setDraws(drawsData)
+        
+        // Carregar cupons para cada sorteio
+        console.log("🎯 MAIN - Carregando cupons para", drawsData.length, "sorteios")
+        drawsData.forEach((draw) => {
+          loadDrawCoupons(draw.id)
+        })
       } catch (error) {
         console.error("Error fetching draws:", error)
       } finally {
@@ -117,6 +144,194 @@ export default function AdminDrawsPage() {
       fetchDraws()
     }
   }, [user])
+
+  // Funções para gerenciar cupons
+  const addCoupon = () => {
+    setFormData(prev => ({
+      ...prev,
+      coupons: [...prev.coupons, { code: "", cardsAmount: "", maxUses: "" }]
+    }))
+  }
+
+  const removeCoupon = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      coupons: prev.coupons.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateCoupon = (index: number, field: keyof typeof formData.coupons[0], value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      coupons: prev.coupons.map((coupon, i) => 
+        i === index ? { ...coupon, [field]: value } : coupon
+      )
+    }))
+  }
+
+  const loadDrawCoupons = async (drawId: string) => {
+    if (drawCoupons[drawId]) return // Já carregado
+    
+    setLoadingCoupons(prev => ({ ...prev, [drawId]: true }))
+    
+    try {
+      const response = await fetch(`/api/coupons/by-draw/${drawId}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.success && data.coupons) {
+          const processedCoupons = data.coupons.map((coupon: any) => ({
+            ...coupon,
+            createdAt: new Date(coupon.createdAt)
+          }))
+          
+          setDrawCoupons(prev => ({
+            ...prev,
+            [drawId]: processedCoupons
+          }))
+        }
+      } else {
+        console.error("Erro ao carregar cupons:", response.status)
+      }
+    } catch (error) {
+      console.error("Erro ao carregar cupons:", error)
+    } finally {
+      setLoadingCoupons(prev => ({ ...prev, [drawId]: false }))
+    }
+  }
+
+  const handleViewCouponDetails = async (coupon: Coupon) => {
+    setSelectedCoupon(coupon)
+    setCouponDetailsOpen(true)
+    setLoadingCouponDetails(true)
+    setCouponUsages([])
+    
+    try {
+      console.log("📋 Carregando detalhes do cupom:", coupon.id)
+      const response = await fetch(`/api/coupons/${coupon.id}/usage`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log("📋 Detalhes carregados:", data)
+        
+        if (data.success) {
+          setCouponUsages(data.usages || [])
+        } else {
+          console.error("❌ API retornou erro:", data.error)
+        }
+      } else {
+        console.error("❌ Erro HTTP:", response.status)
+        
+        // Tentar obter detalhes do erro
+        try {
+          const errorData = await response.json()
+          console.error("❌ Detalhes do erro:", errorData)
+        } catch (e) {
+          console.error("❌ Erro ao obter detalhes:", e)
+        }
+      }
+    } catch (error) {
+      console.error("❌ Erro na requisição:", error)
+    } finally {
+      setLoadingCouponDetails(false)
+    }
+  }
+
+  const handleEditCoupon = (coupon: Coupon) => {
+    setSelectedCoupon(coupon)
+    setEditCouponData({
+      code: coupon.code,
+      cardsAmount: coupon.cardsAmount.toString(),
+      maxUses: coupon.maxUses.toString(),
+      isActive: coupon.isActive
+    })
+    setCouponEditOpen(true)
+  }
+
+  const handleSaveCouponEdit = async () => {
+    if (!selectedCoupon) return
+    
+    try {
+      console.log("✏️ Salvando edição do cupom:", selectedCoupon.id)
+      const response = await fetch(`/api/coupons/${selectedCoupon.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCouponData)
+      })
+      
+      if (response.ok) {
+        toast({
+          title: "Cupom editado",
+          description: "O cupom foi editado com sucesso.",
+        })
+        
+        // Recarregar cupons do sorteio
+        const drawId = selectedCoupon.drawId
+        setDrawCoupons(prev => ({ ...prev, [drawId]: [] })) // Limpar cache
+        loadDrawCoupons(drawId)
+        
+        setCouponEditOpen(false)
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Erro",
+          description: error.error || "Erro ao editar cupom",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error("❌ Erro ao editar cupom:", error)
+      toast({
+        title: "Erro",
+        description: "Erro ao editar cupom",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteCoupon = async () => {
+    if (!selectedCoupon) return
+    
+    if (!confirm("Tem certeza que deseja excluir este cupom? Esta ação não pode ser desfeita.")) {
+      return
+    }
+    
+    try {
+      console.log("🗑️ Excluindo cupom:", selectedCoupon.id)
+      const response = await fetch(`/api/coupons/${selectedCoupon.id}`, {
+        method: "DELETE"
+      })
+      
+      if (response.ok) {
+        toast({
+          title: "Cupom excluído",
+          description: "O cupom foi excluído com sucesso.",
+        })
+        
+        // Recarregar cupons do sorteio
+        const drawId = selectedCoupon.drawId
+        setDrawCoupons(prev => ({ ...prev, [drawId]: [] })) // Limpar cache
+        loadDrawCoupons(drawId)
+        
+        setCouponEditOpen(false)
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Erro",
+          description: error.error || "Erro ao excluir cupom",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error("❌ Erro ao excluir cupom:", error)
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir cupom",
+        variant: "destructive"
+      })
+    }
+  }
 
   const handleDelete = async (drawId: string) => {
     if (confirm("Tem certeza que deseja deletar este sorteio? Esta ação não pode ser desfeita.")) {
@@ -157,11 +372,12 @@ export default function AdminDrawsPage() {
         quinaPercent: "30",
         cheiaPercent: "60",
       },
+      coupons: [],
     })
     setIsDialogOpen(true)
   }
 
-  const handleEditDraw = (draw: Draw) => {
+  const handleEditDraw = async (draw: Draw) => {
     console.log("Editing draw:", draw)
     setIsEditing(true)
     setSelectedDrawId(draw.id)
@@ -170,6 +386,32 @@ export default function AdminDrawsPage() {
     const dateTimeStr = new Date(draw.dateTime.getTime() - draw.dateTime.getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 16)
+
+    // Carregar cupons existentes
+    let existingCoupons: any[] = []
+    try {
+      console.log("🎫 EDIT - Carregando cupons existentes para:", draw.id)
+      const response = await fetch(`/api/coupons/by-draw/${draw.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log("🎫 EDIT - Cupons carregados:", data)
+        
+        if (data.success && data.coupons && data.coupons.length > 0) {
+          existingCoupons = data.coupons.map((coupon: any) => ({
+            id: coupon.id, // ID para identificar cupons existentes
+            code: coupon.code,
+            cardsAmount: coupon.cardsAmount.toString(),
+            maxUses: coupon.maxUses.toString(),
+            isExisting: true, // Flag para identificar cupons existentes
+            currentUses: coupon.currentUses || 0,
+            isActive: coupon.isActive
+          }))
+          console.log("🎫 EDIT - Cupons convertidos:", existingCoupons)
+        }
+      }
+    } catch (error) {
+      console.error("❌ EDIT - Erro ao carregar cupons:", error)
+    }
 
     if (draw.type === "fixed") {
       const prizes = draw.prizes as { quadra: number; quina: number; cheia: number }
@@ -189,6 +431,7 @@ export default function AdminDrawsPage() {
           quinaPercent: "30",
           cheiaPercent: "60",
         },
+        coupons: existingCoupons,
       })
     } else {
       const percentages = draw.prizes as { quadraPercent: number; quinaPercent: number; cheiaPercent: number }
@@ -208,6 +451,7 @@ export default function AdminDrawsPage() {
           quinaPercent: percentages.quinaPercent.toString(),
           cheiaPercent: percentages.cheiaPercent.toString(),
         },
+        coupons: existingCoupons,
       })
     }
 
@@ -423,18 +667,67 @@ export default function AdminDrawsPage() {
 
         const docRef = await addDoc(collection(db, "draws"), newDrawData)
 
-        // Adicionar à lista local
-        setDraws((prev) => [
-          {
-            id: docRef.id,
-            ...newDrawData,
-          } as Draw,
-          ...prev,
-        ])
+        // Criar cupons associados ao sorteio
+        console.log("🎫 CUPONS - Iniciando criação de cupons...")
+        console.log("🎫 CUPONS - FormData.coupons:", formData.coupons)
+        console.log("🎫 CUPONS - Quantidade de cupons:", formData.coupons.length)
+        
+        for (const [index, coupon] of formData.coupons.entries()) {
+          console.log(`🎫 CUPONS - Processando cupom ${index + 1}:`, coupon)
+          
+          if (coupon.code && coupon.cardsAmount && coupon.maxUses) {
+            console.log(`🎫 CUPONS - Cupom ${index + 1} válido, criando...`)
+            
+            const couponData = {
+              code: coupon.code.toUpperCase(),
+              drawId: docRef.id,
+              drawTitle: formData.name,
+              cardsAmount: parseInt(coupon.cardsAmount),
+              maxUses: parseInt(coupon.maxUses),
+              currentUses: 0,
+              isActive: true,
+              createdAt: new Date(),
+              createdBy: user?.id || "",
+              usedBy: []
+            }
+            
+            console.log(`🎫 CUPONS - Dados do cupom ${index + 1}:`, couponData)
+            
+            try {
+              const couponRef = await addDoc(collection(db, "coupons"), couponData)
+              console.log(`✅ CUPONS - Cupom ${index + 1} criado com sucesso! ID:`, couponRef.id)
+            } catch (couponError) {
+              console.error(`❌ CUPONS - Erro ao criar cupom ${index + 1}:`, couponError)
+              throw couponError // Re-throw para parar o processo
+            }
+          } else {
+            console.log(`⚠️ CUPONS - Cupom ${index + 1} inválido (campos faltando):`, {
+              code: coupon.code,
+              cardsAmount: coupon.cardsAmount,
+              maxUses: coupon.maxUses
+            })
+          }
+        }
+        
+        console.log("✅ CUPONS - Finalizada criação de cupons!")
 
+        // Adicionar à lista local
+        const newDraw = {
+          id: docRef.id,
+          ...newDrawData,
+        } as Draw
+        
+        setDraws((prev) => [newDraw, ...prev])
+
+        // Carregar cupons para o novo sorteio
+        if (formData.coupons.length > 0) {
+          setTimeout(() => loadDrawCoupons(docRef.id), 1000) // Pequeno delay para garantir que os cupons foram criados
+        }
+
+        const cuponsCount = formData.coupons.filter(c => c.code && c.cardsAmount && c.maxUses).length
         toast({
           title: "Sorteio criado",
-          description: "O sorteio foi criado com sucesso.",
+          description: `O sorteio foi criado com sucesso${cuponsCount > 0 ? ` com ${cuponsCount} cupons` : ""}.`,
         })
       }
 
@@ -566,7 +859,7 @@ export default function AdminDrawsPage() {
 
         {/* Modal de Criação/Edição */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[550px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>{isEditing ? "Editar Sorteio" : "Criar Sorteio"}</DialogTitle>
               <DialogDescription>
@@ -575,7 +868,8 @@ export default function AdminDrawsPage() {
                   : "Preencha as informações para criar um novo sorteio."}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="flex-1 overflow-y-auto px-1">
+              <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Sorteio</Label>
                 <Input
@@ -636,7 +930,7 @@ export default function AdminDrawsPage() {
               </div>
 
               {formData.type === "fixed" ? (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="prizes.quadra">Prêmio Quadra (R$)</Label>
                     <Input
@@ -678,7 +972,7 @@ export default function AdminDrawsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="percentages.quadraPercent">Quadra (%)</Label>
                     <Input
@@ -735,6 +1029,154 @@ export default function AdminDrawsPage() {
                     <SelectItem value="manual">Manual</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Seção de Cupons de Resgate */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Ticket className="h-4 w-4" />
+                      Cupons de Resgate
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Crie códigos que os usuários podem resgatar para ganhar cartelas gratuitas
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCoupon}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Cupom
+                  </Button>
+                </div>
+
+                {formData.coupons.length > 0 && (
+                  <div className="space-y-3">
+                    {formData.coupons.map((coupon, index) => (
+                      <div key={coupon.id || index} className={`p-4 border rounded-lg space-y-3 ${coupon.isExisting ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm font-medium">
+                              {coupon.isExisting ? 'Cupom Existente' : `Cupom #{index + 1}`}
+                            </Label>
+                            {coupon.isExisting && (
+                              <Badge variant="outline" className="text-xs">
+                                {coupon.currentUses || 0}/{coupon.maxUses} usos
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {coupon.isExisting && (
+                              <div className="flex gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => handleViewCouponDetails(coupon as any)}
+                                >
+                                  👁️ Ver
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => handleEditCoupon(coupon as any)}
+                                >
+                                  ✏️ Editar
+                                </Button>
+                              </div>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeCoupon(index)}
+                              className="h-8 w-8 p-0"
+                              title={coupon.isExisting ? "Remover da lista (não exclui da base)" : "Remover cupom"}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor={`coupon-code-${index}`} className="text-xs">
+                              Código do Cupom
+                            </Label>
+                            <Input
+                              id={`coupon-code-${index}`}
+                              placeholder="Ex: CUPOM10"
+                              value={coupon.code}
+                              onChange={(e) => updateCoupon(index, 'code', e.target.value.toUpperCase())}
+                              className="text-sm"
+                              readOnly={coupon.isExisting}
+                              disabled={coupon.isExisting}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`coupon-cards-${index}`} className="text-xs">
+                              Cartelas Grátis
+                            </Label>
+                            <Input
+                              id={`coupon-cards-${index}`}
+                              type="number"
+                              min="1"
+                              max="50"
+                              placeholder="10"
+                              value={coupon.cardsAmount}
+                              onChange={(e) => updateCoupon(index, 'cardsAmount', e.target.value)}
+                              className="text-sm"
+                              readOnly={coupon.isExisting}
+                              disabled={coupon.isExisting}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`coupon-uses-${index}`} className="text-xs">
+                              Máx. Usos
+                            </Label>
+                            <Input
+                              id={`coupon-uses-${index}`}
+                              type="number"
+                              min="1"
+                              max="1000"
+                              placeholder="100"
+                              value={coupon.maxUses}
+                              onChange={(e) => updateCoupon(index, 'maxUses', e.target.value)}
+                              className="text-sm"
+                              readOnly={coupon.isExisting}
+                              disabled={coupon.isExisting}
+                            />
+                          </div>
+                        </div>
+                        
+                        {coupon.isExisting && (
+                          <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
+                            💡 Este cupom já existe na base de dados. Use os botões "Ver" ou "Editar" para gerenciá-lo.
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {formData.coupons.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground bg-gray-50 rounded-lg border-2 border-dashed">
+                    <Ticket className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Nenhum cupom adicionado</p>
+                    <p className="text-xs">Clique em "Adicionar Cupom" para criar códigos de resgate</p>
+                  </div>
+                )}
+              </div>
               </div>
             </div>
             <DialogFooter>
@@ -853,6 +1295,186 @@ export default function AdminDrawsPage() {
               <Button variant="outline" onClick={() => setStatsDialogOpen(false)}>
                 Fechar
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Detalhes do Cupom */}
+        <Dialog open={couponDetailsOpen} onOpenChange={setCouponDetailsOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Ticket className="h-5 w-5" />
+                Detalhes do Cupom: {selectedCoupon?.code}
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedCoupon && (
+              <div className="space-y-6">
+                {/* Informações Básicas */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Código</Label>
+                    <Badge variant="default" className="font-mono text-base px-3 py-1">
+                      {selectedCoupon.code}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Status</Label>
+                    <Badge variant={selectedCoupon.isActive ? "default" : "secondary"}>
+                      {selectedCoupon.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Cartelas por Uso</Label>
+                    <div className="text-lg font-semibold text-green-600">
+                      +{selectedCoupon.cardsAmount} 🎫
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Usos Disponíveis</Label>
+                    <div className="text-lg font-semibold">
+                      {selectedCoupon.maxUses - selectedCoupon.currentUses}/{selectedCoupon.maxUses}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Histórico de Usos */}
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Histórico de Usos</Label>
+                  
+                  {loadingCouponDetails ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2">Carregando histórico...</span>
+                    </div>
+                  ) : couponUsages.length > 0 ? (
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Usuário</TableHead>
+                            <TableHead>Data de Uso</TableHead>
+                            <TableHead>Cartelas Recebidas</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {couponUsages.map((usage: any) => (
+                            <TableRow key={usage.id}>
+                              <TableCell>{usage.userName}</TableCell>
+                              <TableCell>
+                                {new Date(usage.usedAt).toLocaleString("pt-BR")}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="bg-green-50 text-green-700">
+                                  +{usage.cardsReceived} 🎫
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                      Este cupom ainda não foi usado por nenhum usuário
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCouponDetailsOpen(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Edição do Cupom */}
+        <Dialog open={couponEditOpen} onOpenChange={setCouponEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="h-5 w-5" />
+                Editar Cupom: {selectedCoupon?.code}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-code">Código do Cupom</Label>
+                <Input
+                  id="edit-code"
+                  value={editCouponData.code}
+                  onChange={(e) => setEditCouponData(prev => ({ ...prev, code: e.target.value }))}
+                  placeholder="Ex: CUPOM10"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-cards">Cartelas por Uso</Label>
+                  <Input
+                    id="edit-cards"
+                    type="number"
+                    value={editCouponData.cardsAmount}
+                    onChange={(e) => setEditCouponData(prev => ({ ...prev, cardsAmount: e.target.value }))}
+                    placeholder="Ex: 5"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-max-uses">Usos Máximos</Label>
+                  <Input
+                    id="edit-max-uses"
+                    type="number"
+                    value={editCouponData.maxUses}
+                    onChange={(e) => setEditCouponData(prev => ({ ...prev, maxUses: e.target.value }))}
+                    placeholder="Ex: 100"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-active"
+                  checked={editCouponData.isActive}
+                  onChange={(e) => setEditCouponData(prev => ({ ...prev, isActive: e.target.checked }))}
+                  className="rounded"
+                />
+                <Label htmlFor="edit-active">Cupom ativo</Label>
+              </div>
+              
+              {selectedCoupon && selectedCoupon.currentUses > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ Este cupom já foi usado {selectedCoupon.currentUses} vez(es). 
+                    Reduzi r o número máximo de usos abaixo dos usos atuais pode causar problemas.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter className="flex justify-between">
+              <Button
+                variant="destructive"
+                onClick={handleDeleteCoupon}
+                disabled={!!(selectedCoupon?.currentUses && selectedCoupon.currentUses > 0)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </Button>
+              <div className="space-x-2">
+                <Button variant="outline" onClick={() => setCouponEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveCouponEdit}>
+                  Salvar Alterações
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

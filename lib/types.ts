@@ -9,6 +9,11 @@ export interface User {
   totalWithdrawn: number
   totalWon?: number
   lastWin?: Date
+  // Campos de afiliado
+  affiliateCode?: string
+  referredBy?: string
+  referredUsers?: string[]
+  totalCommission?: number
   createdAt: Date
 }
 
@@ -86,4 +91,58 @@ export interface WinnerDetail {
   cardId: string
   prize: number
   type: "quadra" | "quina" | "cheia"
+}
+
+export interface AffiliateSettings {
+  commissionRate: number
+  minWithdrawal: number
+  dailyWithdrawalLimit: number
+}
+
+export interface AffiliateWithdrawal {
+  id: string
+  affiliateId: string
+  affiliateName: string
+  amount: number
+  status: "pending" | "approved" | "rejected"
+  createdAt: Date
+  processedAt?: Date
+  processedBy?: string
+}
+
+export interface CommissionTransaction {
+  id: string
+  affiliateId: string
+  userId: string
+  depositId: string
+  amount: number
+  commissionRate: number
+  status: "pending" | "paid"
+  createdAt: Date
+  paidAt?: Date
+}
+
+export interface Coupon {
+  id: string
+  code: string
+  drawId: string
+  drawTitle: string
+  cardsAmount: number
+  maxUses: number
+  currentUses: number
+  isActive: boolean
+  createdAt: Date
+  createdBy: string
+  usedBy: string[]
+}
+
+export interface CouponUsage {
+  id: string
+  couponId: string
+  couponCode: string
+  userId: string
+  drawId: string
+  drawTitle: string
+  cardsReceived: number
+  usedAt: Date
 }

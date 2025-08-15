@@ -6,7 +6,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signOut } from "firebase/auth"
-import { LayoutDashboard, CreditCard, Banknote, Users, Trophy, Settings, LogOut, Menu } from "lucide-react"
+import { LayoutDashboard, CreditCard, Banknote, Users, Trophy, Settings, LogOut, Menu, UserCheck, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { auth } from "@/lib/firebase"
@@ -35,6 +35,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { href: "/backoffice/depositos", icon: CreditCard, label: "Depósitos" },
     { href: "/backoffice/saques", icon: Banknote, label: "Saques" },
     { href: "/backoffice/usuarios", icon: Users, label: "Usuários" },
+    { href: "/backoffice/afiliados", icon: UserCheck, label: "Afiliados" },
+    { href: "/backoffice/saques-afiliados", icon: Wallet, label: "Saques Afiliados" },
     { href: "/backoffice/sorteios", icon: Trophy, label: "Sorteios" },
     { href: "/backoffice/configuracoes", icon: Settings, label: "Configurações" },
   ]

@@ -47,6 +47,38 @@ export async function POST(req: NextRequest) {
       totalDeposited: totalDepositedAtual + valorNumerico,
     });
 
+    // Calcular comissão se o usuário foi indicado
+    try {
+      console.log('🚀 Webhook - Iniciando cálculo de comissão para:', {
+        depositId: depositDoc.id,
+        userId: depositData.userId,
+        amount: valorNumerico
+      });
+      
+      const commissionResponse = await fetch(`${req.nextUrl.origin}/api/commissions/calculate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          depositId: depositDoc.id,
+          userId: depositData.userId,
+          amount: valorNumerico
+        })
+      });
+      
+      if (commissionResponse.ok) {
+        const commissionData = await commissionResponse.json();
+        console.log('✅ Webhook - Comissão calculada:', commissionData);
+      } else {
+        const errorData = await commissionResponse.json();
+        console.log('❌ Webhook - Erro na API de comissão:', errorData);
+      }
+    } catch (commissionError) {
+      console.error('💥 Webhook - Erro ao calcular comissão:', commissionError);
+      // Não falhar o webhook se a comissão não funcionar
+    }
+
     return NextResponse.json({ received: true });
   } catch (error: any) {
     console.error('Erro no webhook SuitPay:', error);
