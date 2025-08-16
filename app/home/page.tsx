@@ -24,6 +24,7 @@ import type { Draw, Purchase } from "@/lib/types"
 import { Clock, Trophy, Users, ShoppingCart, Ticket, Gift } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { calculatePrize } from "@/lib/prize-utils"
+import { calculateCardBonuses, formatBonusText } from "@/lib/bonus-utils"
 
 export default function HomePage() {
   const { user, loading } = useAuth()
@@ -172,21 +173,45 @@ export default function HomePage() {
       return
     }
 
+    // Calcular cartelas bônus
+    const bonusCards = calculateCardBonuses(selectedQuantity, selectedDraw.cardBonuses)
+    const totalCards = selectedQuantity + bonusCards
+
     setPurchasing(true)
 
     try {
-      // Gerar cartelas
+      // Gerar cartelas (compradas + bônus)
       const cardIds: string[] = []
+      const bonusCardIds: string[] = []
+      
+      // Cartelas compradas
       for (let i = 0; i < selectedQuantity; i++) {
         const numbers = generateBingoCard()
         const cardRef = await addDoc(collection(db, "cards"), {
           userId: user.id,
           drawId: selectedDraw.id,
-          numbers, // Now this is a flat array of 25 numbers
-          markedNumbers: Array(25).fill(false), // Flat array of 25 booleans
+          numbers,
+          markedNumbers: Array(25).fill(false),
           purchaseDate: new Date(),
+          isPaid: true
         })
         cardIds.push(cardRef.id)
+      }
+
+      // Cartelas bônus
+      for (let i = 0; i < bonusCards; i++) {
+        const numbers = generateBingoCard()
+        const cardRef = await addDoc(collection(db, "cards"), {
+          userId: user.id,
+          drawId: selectedDraw.id,
+          numbers,
+          markedNumbers: Array(25).fill(false),
+          purchaseDate: new Date(),
+          isPaid: false,
+          isBonus: true,
+          fromBonus: true
+        })
+        bonusCardIds.push(cardRef.id)
       }
 
       // Criar registro de compra
@@ -196,6 +221,8 @@ export default function HomePage() {
         quantity: selectedQuantity,
         totalAmount,
         cardIds,
+        bonusCardIds: bonusCards > 0 ? bonusCardIds : undefined,
+        totalCards,
         createdAt: new Date(),
       })
 
@@ -207,7 +234,7 @@ export default function HomePage() {
       // Atualizar total de cartelas vendidas no sorteio (incrementar totalCards)
       const drawRef = doc(db, "draws", selectedDraw.id);
       await updateDoc(drawRef, {
-        totalCards: ((selectedDraw as any).totalCards || 0) + selectedQuantity,
+        totalCards: ((selectedDraw as any).totalCards || 0) + totalCards,
       });
 
       // Atualizar estado local
@@ -219,14 +246,15 @@ export default function HomePage() {
           drawId: selectedDraw.id,
           quantity: selectedQuantity,
           totalAmount,
-          cardIds,
+          cardIds: [...cardIds, ...bonusCardIds],
           createdAt: new Date(),
         },
       ])
 
+      const bonusMessage = bonusCards > 0 ? ` + ${bonusCards} cartela${bonusCards > 1 ? 's' : ''} bônus!` : ""
       toast({
         title: "Compra realizada!",
-        description: `${selectedQuantity} cartelas compradas com sucesso.`,
+        description: `${selectedQuantity} cartela${selectedQuantity > 1 ? 's' : ''} comprada${selectedQuantity > 1 ? 's' : ''}${bonusMessage}`,
       })
 
       setIsModalOpen(false)
@@ -425,6 +453,26 @@ export default function HomePage() {
                           </>
                         )}
                       </div>
+                      
+                      {/* Mostrar bonificações disponíveis */}
+                      {draw.cardBonuses && draw.cardBonuses.length > 0 && draw.cardBonuses.some(bonus => bonus.isActive) && (
+                        <div className="bg-green-500/20 border border-green-400 rounded p-2 mt-2">
+                          <div className="flex items-center gap-1 text-green-100 font-semibold text-sm mb-1">
+                            <Gift className="h-4 w-4" />
+                            Bonificações Ativas
+                          </div>
+                          {draw.cardBonuses
+                            .filter(bonus => bonus.isActive)
+                            .sort((a, b) => a.minQuantity - b.minQuantity)
+                            .map((bonus, index) => (
+                              <div key={bonus.id} className="text-xs text-green-100 flex justify-between">
+                                <span>Compre {bonus.minQuantity}+:</span>
+                                <span className="font-medium">+{bonus.bonusCards} grátis</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
                       {draw.status === "waiting" && (
                         <div className="text-center py-2 bg-yellow-50 rounded text-yellow-700 text-sm">
                           Inicia em: {getTimeUntilDraw(draw.dateTime)}
@@ -535,11 +583,37 @@ export default function HomePage() {
                     <span>Valor unitário:</span>
                     <span>R$ {selectedDraw.cardPrice.toFixed(2)}</span>
                   </div>
+                  
+                  {/* Mostrar bonificações se aplicável */}
+                  {selectedDraw.cardBonuses && calculateCardBonuses(selectedQuantity, selectedDraw.cardBonuses) > 0 && (
+                    <div className="flex justify-between text-sm mb-2 text-green-600 font-medium">
+                      <span>🎁 Cartelas bônus:</span>
+                      <span>+{calculateCardBonuses(selectedQuantity, selectedDraw.cardBonuses)} grátis</span>
+                    </div>
+                  )}
+                  
                   <div className="flex justify-between font-bold">
-                    <span>Total:</span>
+                    <span>Total a pagar:</span>
                     <span>R$ {(selectedQuantity * selectedDraw.cardPrice).toFixed(2)}</span>
                   </div>
+                  
+                  {/* Total de cartelas incluindo bônus */}
+                  {selectedDraw.cardBonuses && calculateCardBonuses(selectedQuantity, selectedDraw.cardBonuses) > 0 && (
+                    <div className="flex justify-between text-sm mt-2 text-green-600 font-medium">
+                      <span>Total de cartelas:</span>
+                      <span>{selectedQuantity + calculateCardBonuses(selectedQuantity, selectedDraw.cardBonuses)} cartelas</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Exibir descrição das bonificações */}
+                {selectedDraw.cardBonuses && formatBonusText(selectedQuantity, selectedDraw.cardBonuses) && (
+                  <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                    <p className="text-sm text-green-700 font-medium">
+                      {formatBonusText(selectedQuantity, selectedDraw.cardBonuses)}
+                    </p>
+                  </div>
+                )}
 
                 <div className="text-center text-sm text-muted-foreground">Seu saldo: R$ {user.balance.toFixed(2)}</div>
               </div>

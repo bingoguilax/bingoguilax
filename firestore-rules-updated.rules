@@ -26,11 +26,8 @@ service cloud.firestore {
 
     // users - REGRA CORRIGIDA COM PERMISSÃO PARA AFILIADOS
     match /users/{userId} {
-      // Permitir leitura para usuários autenticados OU 
-      // para verificação de código de afiliado (campos específicos)
-      allow read: if isAuthenticated() || 
-                    (request.auth == null && 
-                     resource.data.keys().hasAny(['affiliateCode', 'name', 'isActiveAffiliate']));
+      // Permitir leitura para usuários autenticados (necessário para carregar usuários referidos)
+      allow read: if isAuthenticated() || isAdmin();
       
       allow create: if isAuthenticated() && isOwner(userId);
       
@@ -51,11 +48,49 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Regra para transações de comissão
+    // ============ REGRAS PARA SISTEMA DE AFILIAÇÃO ============
+
+    // commissions - Comissões de afiliados
+    match /commissions/{commissionId} {
+      // Admins podem ler todas as comissões
+      // Afiliados podem ler apenas suas próprias comissões
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.affiliateId == request.auth.uid);
+      
+      // Sistema pode criar comissões automaticamente
+      allow create: if isAuthenticated();
+      
+      // Apenas admins podem atualizar (para marcar como pago)
+      allow update: if isAdmin();
+      
+      // Apenas admins podem deletar
+      allow delete: if isAdmin();
+    }
+
+    // Regra para transações de comissão (se existir)
     match /commissionTransactions/{transactionId} {
-      allow read: if isAuthenticated() && isAdmin();
+      allow read: if isAuthenticated() && 
+        (isAdmin() || resource.data.affiliateId == request.auth.uid);
       allow create: if isAuthenticated();
       allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // affiliateWithdrawals - Saques de afiliados
+    match /affiliateWithdrawals/{withdrawalId} {
+      // Admins podem ler todos os saques
+      // Afiliados podem ler apenas seus próprios saques
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.affiliateId == request.auth.uid);
+      
+      // Afiliados podem criar solicitações de saque
+      allow create: if isAuthenticated() &&
+                      request.resource.data.affiliateId == request.auth.uid;
+      
+      // Apenas admins podem atualizar (aprovar/rejeitar)
+      allow update: if isAdmin();
+      
+      // Apenas admins podem deletar
       allow delete: if isAdmin();
     }
 
@@ -213,24 +248,6 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       
       // Apenas admins podem atualizar (não deveria ser necessário)
-      allow update: if isAdmin();
-      
-      // Apenas admins podem deletar
-      allow delete: if isAdmin();
-    }
-
-    // affiliateWithdrawals - Saques de afiliados
-    match /affiliateWithdrawals/{withdrawalId} {
-      // Admins podem ler todos os saques
-      // Afiliados podem ler apenas seus próprios saques
-      allow read: if isAdmin() || 
-        (isAuthenticated() && resource.data.affiliateId == request.auth.uid);
-      
-      // Afiliados podem criar solicitações de saque
-      allow create: if isAuthenticated() &&
-                      request.resource.data.affiliateId == request.auth.uid;
-      
-      // Apenas admins podem atualizar (aprovar/rejeitar)
       allow update: if isAdmin();
       
       // Apenas admins podem deletar

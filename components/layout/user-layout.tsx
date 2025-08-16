@@ -6,7 +6,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signOut } from "firebase/auth"
-import { Menu, Home, CreditCard, Banknote, User, LogOut } from "lucide-react"
+import { Menu, Home, CreditCard, Banknote, User, LogOut, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { auth } from "@/lib/firebase"
@@ -34,6 +34,7 @@ export function UserLayout({ children }: UserLayoutProps) {
     { href: "/home", icon: Home, label: "Home" },
     { href: "/depositar", icon: CreditCard, label: "Depositar" },
     { href: "/saque", icon: Banknote, label: "Saque" },
+    { href: "/afiliados", icon: Users, label: "Afiliados" },
     { href: "/perfil", icon: User, label: "Perfil" },
   ]
 

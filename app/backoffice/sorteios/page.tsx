@@ -25,7 +25,7 @@ import { AdminLayout } from "@/components/layout/admin-layout"
 import { useAuth } from "@/hooks/use-auth"
 import { db } from "@/lib/firebase"
 import type { Draw, Coupon } from "@/lib/types"
-import { Trash2, Edit, Plus, Trophy, Calendar, BarChart3, Users, DollarSign, Ticket, X } from "lucide-react"
+import { Trash2, Edit, Plus, Trophy, Calendar, BarChart3, Users, DollarSign, Ticket, X, Gift } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface DrawFormData {
@@ -48,6 +48,13 @@ interface DrawFormData {
     code: string
     cardsAmount: string
     maxUses: string
+  }>
+  cardBonuses: Array<{
+    id: string
+    minQuantity: string
+    bonusCards: string
+    description: string
+    isActive: boolean
   }>
 }
 
@@ -86,6 +93,7 @@ export default function AdminDrawsPage() {
       cheiaPercent: "60",
     },
     coupons: [],
+    cardBonuses: [],
   })
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedDrawStats, setSelectedDrawStats] = useState<DrawStats | null>(null)
@@ -165,6 +173,36 @@ export default function AdminDrawsPage() {
       ...prev,
       coupons: prev.coupons.map((coupon, i) => 
         i === index ? { ...coupon, [field]: value } : coupon
+      )
+    }))
+  }
+
+  // Funções para gerenciar bonificações de cartelas
+  const addCardBonus = () => {
+    setFormData(prev => ({
+      ...prev,
+      cardBonuses: [...prev.cardBonuses, { 
+        id: `bonus-${Date.now()}`,
+        minQuantity: "", 
+        bonusCards: "", 
+        description: "",
+        isActive: true
+      }]
+    }))
+  }
+
+  const removeCardBonus = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      cardBonuses: prev.cardBonuses.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateCardBonus = (index: number, field: keyof typeof formData.cardBonuses[0], value: string | boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      cardBonuses: prev.cardBonuses.map((bonus, i) => 
+        i === index ? { ...bonus, [field]: value } : bonus
       )
     }))
   }
@@ -373,6 +411,7 @@ export default function AdminDrawsPage() {
         cheiaPercent: "60",
       },
       coupons: [],
+      cardBonuses: [],
     })
     setIsDialogOpen(true)
   }
@@ -432,6 +471,13 @@ export default function AdminDrawsPage() {
           cheiaPercent: "60",
         },
         coupons: existingCoupons,
+        cardBonuses: draw.cardBonuses?.map(bonus => ({
+          id: bonus.id,
+          minQuantity: bonus.minQuantity.toString(),
+          bonusCards: bonus.bonusCards.toString(),
+          description: bonus.description,
+          isActive: bonus.isActive
+        })) || [],
       })
     } else {
       const percentages = draw.prizes as { quadraPercent: number; quinaPercent: number; cheiaPercent: number }
@@ -452,6 +498,13 @@ export default function AdminDrawsPage() {
           cheiaPercent: percentages.cheiaPercent.toString(),
         },
         coupons: existingCoupons,
+        cardBonuses: draw.cardBonuses?.map(bonus => ({
+          id: bonus.id,
+          minQuantity: bonus.minQuantity.toString(),
+          bonusCards: bonus.bonusCards.toString(),
+          description: bonus.description,
+          isActive: bonus.isActive
+        })) || [],
       })
     }
 
@@ -614,6 +667,17 @@ export default function AdminDrawsPage() {
         }
       }
 
+      // Processar bonificações de cartelas
+      const cardBonuses = formData.cardBonuses
+        .filter(bonus => bonus.minQuantity && bonus.bonusCards && bonus.description)
+        .map(bonus => ({
+          id: bonus.id,
+          minQuantity: parseInt(bonus.minQuantity),
+          bonusCards: parseInt(bonus.bonusCards),
+          description: bonus.description,
+          isActive: bonus.isActive
+        }))
+
       const drawData = {
         name: formData.name,
         dateTime,
@@ -621,6 +685,7 @@ export default function AdminDrawsPage() {
         type: formData.type,
         mode: formData.mode,
         prizes,
+        cardBonuses: cardBonuses.length > 0 ? cardBonuses : undefined,
         // Só adicionar externalUrl se for modo manual
         ...(formData.mode === "manual" && {
           externalUrl:
@@ -725,9 +790,10 @@ export default function AdminDrawsPage() {
         }
 
         const cuponsCount = formData.coupons.filter(c => c.code && c.cardsAmount && c.maxUses).length
+        const bonusesCount = cardBonuses.length
         toast({
           title: "Sorteio criado",
-          description: `O sorteio foi criado com sucesso${cuponsCount > 0 ? ` com ${cuponsCount} cupons` : ""}.`,
+          description: `O sorteio foi criado com sucesso${cuponsCount > 0 ? ` com ${cuponsCount} cupons` : ""}${bonusesCount > 0 ? ` e ${bonusesCount} bonificações` : ""}.`,
         })
       }
 
@@ -1174,6 +1240,127 @@ export default function AdminDrawsPage() {
                     <Ticket className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">Nenhum cupom adicionado</p>
                     <p className="text-xs">Clique em "Adicionar Cupom" para criar códigos de resgate</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Seção de Bonificações de Cartelas */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Gift className="h-4 w-4" />
+                      Bonificações de Cartelas
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Defina cartelas bônus que os usuários ganham ao comprar uma certa quantidade
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCardBonus}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Bonificação
+                  </Button>
+                </div>
+
+                {formData.cardBonuses.length > 0 && (
+                  <div className="space-y-3">
+                    {formData.cardBonuses.map((bonus, index) => (
+                      <div key={bonus.id} className="p-4 border rounded-lg space-y-3 bg-green-50 border-green-200">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">
+                            Bonificação #{index + 1}
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`bonus-active-${index}`}
+                                checked={bonus.isActive}
+                                onChange={(e) => updateCardBonus(index, 'isActive', e.target.checked)}
+                                className="rounded"
+                              />
+                              <Label htmlFor={`bonus-active-${index}`} className="text-xs">
+                                Ativo
+                              </Label>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeCardBonus(index)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor={`bonus-min-${index}`} className="text-xs">
+                              Mínimo de Cartelas
+                            </Label>
+                            <Input
+                              id={`bonus-min-${index}`}
+                              type="number"
+                              min="1"
+                              max="100"
+                              placeholder="Ex: 5"
+                              value={bonus.minQuantity}
+                              onChange={(e) => updateCardBonus(index, 'minQuantity', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`bonus-cards-${index}`} className="text-xs">
+                              Cartelas Bônus
+                            </Label>
+                            <Input
+                              id={`bonus-cards-${index}`}
+                              type="number"
+                              min="1"
+                              max="50"
+                              placeholder="Ex: 2"
+                              value={bonus.bonusCards}
+                              onChange={(e) => updateCardBonus(index, 'bonusCards', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor={`bonus-desc-${index}`} className="text-xs">
+                              Descrição
+                            </Label>
+                            <Input
+                              id={`bonus-desc-${index}`}
+                              placeholder="Ex: Compre 5, ganhe 2"
+                              value={bonus.description}
+                              onChange={(e) => updateCardBonus(index, 'description', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
+                          💡 Usuários que comprarem {bonus.minQuantity || "X"} cartelas ou mais ganharão {bonus.bonusCards || "Y"} cartelas bônus automaticamente.
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {formData.cardBonuses.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground bg-gray-50 rounded-lg border-2 border-dashed">
+                    <Gift className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Nenhuma bonificação configurada</p>
+                    <p className="text-xs">Clique em "Adicionar Bonificação" para criar regras de bônus</p>
                   </div>
                 )}
               </div>

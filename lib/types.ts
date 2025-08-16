@@ -65,7 +65,9 @@ export interface Draw {
   externalUrl?: string
   createdAt: Date
   winners?: Record<"quadra" | "quina" | "cheia", string[]>  
-  winnerDetails?: Record<"quadra" | "quina" | "cheia", WinnerDetail[]>  
+  winnerDetails?: Record<"quadra" | "quina" | "cheia", WinnerDetail[]>
+  // Sistema de bonificação de cartelas
+  cardBonuses?: CardBonus[]
 }
 
 export interface Card {
@@ -84,6 +86,8 @@ export interface Purchase {
   quantity: number
   totalAmount: number
   cardIds: string[]
+  bonusCardIds?: string[]
+  totalCards?: number
   createdAt: Date
 }
 
@@ -154,4 +158,12 @@ export interface CouponUsage {
   drawTitle: string
   cardsReceived: number
   usedAt: Date
+}
+
+export interface CardBonus {
+  id: string
+  minQuantity: number
+  bonusCards: number
+  description: string
+  isActive: boolean
 }
